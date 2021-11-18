@@ -16,7 +16,7 @@ enum Op {logor, logand, noteq, eq, leq, geq, lt,
 enum AssignmentOp {plusequals, minusequals, assignequals};
 enum Enclosures {lparen, rparen, lcurly, rcurly, lsquare, rsquare};
 enum Punctuation {comma, semicolon};
-enum Literals {charliteral, stringliteral};
+enum Literals {hexliteral, charliteral, stringliteral};
 //expand on this later
 enum Errors {illegalchar, missingquotes};
 
@@ -27,7 +27,7 @@ enum Errors {illegalchar, missingquotes};
 
 struct Token{
     Tag tag;
-    std::variant<int32_t, std::string, std::monostate, Op, AssignmentOp, Enclosures, Punctuation, Literals, Errors> value;
+    std::variant<int32_t, std::string, std::monostate, Op, AssignmentOp, Enclosures, Punctuation, Errors> value;
 };
 
 std::vector<std::pair<std::string, Token>> symbolMatcher = { {"||", {oper, logor}}, 
@@ -68,8 +68,27 @@ std::ostream &operator<<(std::ostream &os, const Token &token){
     return os;
 }
 
+
 bool isDigit(char c){
     return (c >= '0' && c <= '9');
+}
+
+bool isHexDigit(char c){
+    return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+bool isHexString(std::string s){
+    if (s.length() < 3 || s.substr(0, 2) != "0x"){
+        return false;
+    }
+    for (int idx = 2; idx < s.length(); idx++){
+        if (!isHexDigit(s[idx])){
+            //in this scenario, there's some digit in the hex string after 0x that is not a hex digit
+            return false;
+        }
+    }
+    //in this scenario, every digit after 0x is a hex digit
+    return true;
 }
 
 bool isLetter(char c){
@@ -81,10 +100,42 @@ int32_t charToDigit(char c){
     return c - '0';
 }
 
+std::string peekNCharacters(std::ifstream &input, int n){
+    assert(n >= 1);
+    std::string nextN = "";
+    for (int i = 0; i < n; i++){
+        char peek = (char) input.peek();
+        nextN += peek;
+        input.ignore(1);
+    }
+    for (int i = 0; i < n; i++){
+        input.unget();
+    }
+    return nextN;
+}
+
 //Given that the next token to be scanned is a number, scan the number
-Token scanNumber(std::ifstream &input){
+Token scanNumberOrHex(std::ifstream &input){
     char peek = (char) input.peek();
     assert(isDigit(peek));
+    if (peekNCharacters(input, 2) == "0x"){
+        input.ignore(2);
+        std::string hexString = "0x";
+        while (isDigit(input.peek())){
+            hexString += input.peek();
+            input.ignore(1);
+        }
+        if (isHexString(hexString)){
+            return {literal, hexString};
+        }
+        //we should probably print out some error if this happens, because a "0x" character at the start of a 
+        // token should never happen
+        else{
+            for (int c = 0; c < hexString.length(); c++){
+                input.unget();
+            }
+        }
+    }
     int next_num = charToDigit(peek);
     input.ignore(1);
     peek = (char) input.peek();
@@ -107,20 +158,6 @@ Token scanWord(std::ifstream &input){
         peek = (char) input.peek();
     }
     return {word, next_word};
-}
-
-std::string peekNCharacters(std::ifstream &input, int n){
-    assert(n >= 1);
-    std::string nextN = "";
-    for (int i = 0; i < n; i++){
-        char peek = (char) input.peek();
-        nextN += peek;
-        input.ignore(1);
-    }
-    for (int i = 0; i < n; i++){
-        input.unget();
-    }
-    return nextN;
 }
 
 //When there's a line comment, move the ifstream to the beginning of the next line
@@ -149,6 +186,7 @@ Token scanSymbol(std::ifstream &input){
     return {eof, std::monostate{}};
     //should create some mapping from operators to tag
 }
+
 //current bug: if file ends in comment, something goes wrong and the program doesn't finish.
 Token scanOneToken(std::ifstream &input){
     if (input.peek() == EOF || input.eof()){
@@ -164,7 +202,7 @@ Token scanOneToken(std::ifstream &input){
             continue;
         }
         else if (isDigit(peek)){
-            return scanNumber(input);
+            return scanNumberOrHex(input);
         }
         else if (isLetter(peek)){
             return scanWord(input);
