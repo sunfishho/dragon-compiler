@@ -236,6 +236,56 @@ Token scanCharLiteral(std::ifstream &input){
     }
 }
 
+Token scanStringLiteral(std::ifstream &input){
+    assert(input.peek() == '\"');
+    input.ignore(1);
+    char nextChar = input.peek();
+    std::string stringVal = "";
+    while (nextChar != '\"' && !input.eof()){
+        if (nextChar == '\\'){
+            std::string nextTwoChars = peekNCharacters(input, 2);
+            // '\t'
+            if (nextTwoChars == "\\t"){
+                input.ignore(2);
+                stringVal += '\t';
+            }
+            // '\n'
+            else if (nextTwoChars == "\\n"){
+                input.ignore(2);
+                stringVal += '\n';
+            }
+            // '\''
+            else if (nextTwoChars == "\\\'"){
+                input.ignore(2);
+                stringVal += '\'';
+            }
+            // '\"'
+            else if (nextTwoChars == "\\\""){
+                input.ignore(2);
+                stringVal += '\"';
+            }
+            // '\\'
+            else if (nextTwoChars == "\\\\"){
+                input.ignore(2);
+                stringVal += '\\';
+            }
+            else{
+                input.ignore(1);
+                stringVal += '\\';
+            }
+            nextChar = input.peek();
+        }
+        else{
+            assert(isValidNormalChar(nextChar));
+            stringVal += nextChar;
+            input.ignore(1);
+            nextChar = input.peek();
+        }
+    }
+    input.ignore(1);
+    return {literal, stringVal};
+}
+
 //When there's a line comment, move the ifstream to the beginning of the next line
 void skipComment(std::ifstream &input){
     assert(peekNCharacters(input, 2) == "//");
@@ -277,6 +327,9 @@ Token scanOneToken(std::ifstream &input){
         }
         else if (peek == '\''){
             return scanCharLiteral(input);
+        }
+        else if (peek == '\"'){
+            return scanStringLiteral(input);
         }
         else if (isDigit(peek)){
             return scanNumberOrHex(input);
