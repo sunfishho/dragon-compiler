@@ -9,14 +9,13 @@
 
 //word will eventually be split into identifiers and keywords
 
-
+//literal can be a character literal, string literal, or hex literal. an int literal would be classified as a "number"
 enum Tag {number, word, eof, oper, assignment, enclose, punctuation, literal, error};
 enum Op {logor, logand, noteq, eq, leq, geq, lt, 
          gt, lognot, plus, minus, times, divide, mod};
 enum AssignmentOp {plusequals, minusequals, assignequals};
 enum Enclosures {lparen, rparen, lcurly, rcurly, lsquare, rsquare};
 enum Punctuation {comma, semicolon};
-enum Literals {hexliteral, charliteral, stringliteral};
 //expand on this later
 enum Errors {illegalchar, missingquotes};
 
@@ -59,12 +58,38 @@ std::vector<std::pair<std::string, Token>> symbolMatcher = { {"||", {oper, logor
 //from https://stackoverflow.com/questions/62355613/stdvariant-cout-in-c
 struct make_string_functor{
   std::string operator()(const std::string &x) const { return x; }
+  std::string operator()(char c) const { std::string s = ""; s += c; return s; }
   std::string operator()(int x) const { return std::to_string(x); }
   std::string operator()(std::monostate _) const { return "EOF"; }
 };
 
+std::string printTag(Tag t){
+    switch (t)
+    {
+        case number: // code to be executed if n = 1;
+            return "number";
+        case word: // code to be executed if n = 2;
+            return "word";
+        case eof:
+            return "end of file";
+        case oper:
+            return "operator";
+        case assignment:
+            return "assignment operator";
+        case enclose:
+            return "enclosures";
+        case punctuation:
+            return "punctuation";
+        case literal:
+            return "literal";
+        default: 
+            return "error";
+    }
+    return "";
+}
+
 std::ostream &operator<<(std::ostream &os, const Token &token){   
-    std::cout << token.tag << " " << std::visit(make_string_functor(), token.value);
+    std::cout << std::setw(15) << std::left << printTag(token.tag) << std::visit(make_string_functor(), token.value);
     return os;
 }
 
@@ -93,6 +118,14 @@ bool isHexString(std::string s){
 
 bool isLetter(char c){
     return ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_');
+}
+
+bool isValidChar(char c){
+    return (32 <= c && c <= 126) || (c == '\"' || c == '\'' || c == '\\' || c == '\t' ||  c == '\n');
+}
+
+bool isValidNormalChar(char c){
+    return (32 <= c && c <= 126) && (c != '\"' || c != '\'' || c != '\\' || c != '\t' || c != '\n');
 }
 
 int32_t charToDigit(char c){
@@ -160,6 +193,49 @@ Token scanWord(std::ifstream &input){
     return {word, next_word};
 }
 
+Token scanCharLiteral(std::ifstream &input){
+    assert(input.peek() == '\'');
+    input.ignore(1);
+    char charLiteralVal = input.peek();
+    if (charLiteralVal == '\\'){
+        input.ignore(1);
+        std::string nextTwoChars = peekNCharacters(input, 2);
+        // '\t'
+        if (nextTwoChars == "t\'"){
+            input.ignore(2);
+            return {literal, '\t'};
+        }
+        // '\n'
+        else if (nextTwoChars == "n\'"){
+            input.ignore(2);
+            return {literal, '\n'};
+        }
+        // '\''
+        else if (nextTwoChars == "\'\'"){
+            input.ignore(2);
+            return {literal, '\''};
+        }
+        // '\"'
+        else if (nextTwoChars == "\"\'"){
+            input.ignore(2);
+            return {literal, '\"'};
+        }
+        // '\\'
+        else{
+            assert(nextTwoChars == "\\\'");
+            input.ignore(2);
+            return {literal, '\\'};
+        }
+    }
+    else{
+        assert(isValidNormalChar(charLiteralVal));
+        input.ignore(1);
+        assert(input.peek() == '\'');
+        input.ignore(1);
+        return {literal, charLiteralVal};
+    }
+}
+
 //When there's a line comment, move the ifstream to the beginning of the next line
 void skipComment(std::ifstream &input){
     assert(peekNCharacters(input, 2) == "//");
@@ -184,10 +260,8 @@ Token scanSymbol(std::ifstream &input){
         }
     }
     return {eof, std::monostate{}};
-    //should create some mapping from operators to tag
 }
 
-//current bug: if file ends in comment, something goes wrong and the program doesn't finish.
 Token scanOneToken(std::ifstream &input){
     if (input.peek() == EOF || input.eof()){
        return {eof, std::monostate{}};
@@ -200,6 +274,9 @@ Token scanOneToken(std::ifstream &input){
         if (peek == ' ' || peek == '\t' || peek == '\n'){
             input.ignore(1);
             continue;
+        }
+        else if (peek == '\''){
+            return scanCharLiteral(input);
         }
         else if (isDigit(peek)){
             return scanNumberOrHex(input);
@@ -240,10 +317,10 @@ std::vector<Token> scanner(std::string filename){
 }
 
 
+
 int main(){
     std::vector<Token> tokenVector = scanner("test.in");
     for (auto token : tokenVector){
         std::cout << token << std::endl;
     }
 }
-
