@@ -103,17 +103,15 @@ std::ostream &operator<<(std::ostream &os, const Token &token){
 }
 
 std::string printErrorType(int x){
-    if (x == 0){
-        return "Illegal Character";
-    }
-    else if (x == 1){
-        return "Missing Quotation Mark";
-    }
-    else if (x == 2){
-        return "Unexpected End Of File";
-    }
-    else{
-        return "No Error";
+    switch(x){
+        case 0:
+            return "Illegal Character";
+        case 1:
+            return "Missing Quotation Mark";
+        case 2:
+            return "Unexpected End Of File";
+        default:
+            return "No Error";
     }
 }
 
